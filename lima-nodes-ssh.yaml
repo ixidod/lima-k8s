@@ -17,7 +17,7 @@
       loop: "{{ node_list }}"
       register: java_check
       changed_when: false
-
+    # Create a fake Java command if Java is missing
     - name: Create fake Java command if missing
       shell: >
         limactl shell {{ item }} -- sudo bash -c 'echo "$(whoami) ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/nopasswd && chmod 0440 /etc/sudoers.d/nopasswd && ln -s /bin/true /usr/bin/java'
@@ -33,6 +33,7 @@
       loop: "{{ node_list }}"
       ignore_errors: yes
 
+      #Run system updates and upgrades on each Lima node change --sudo -u {{ it to your name }}
     - name: SSH into Lima nodes and run updates
       shell: limactl shell {{ item }} -- sudo -u iota -i bash -c "sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y"
       loop: "{{ node_list }}"
