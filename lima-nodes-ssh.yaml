@@ -33,7 +33,7 @@
       loop: "{{ node_list }}"
       ignore_errors: yes
 
-      #Run system updates and upgrades on each Lima node change --sudo -u {{ it to your name }}
+      #Run system updates and upgrades on each Lima node change --sudo -u {{ change it to your name }}
     - name: SSH into Lima nodes and run updates
       shell: limactl shell {{ item }} -- sudo -u iota -i bash -c "sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y"
       loop: "{{ node_list }}"
