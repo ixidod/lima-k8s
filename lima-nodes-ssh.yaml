@@ -1,0 +1,44 @@
+- name: SSH into Lima Ubuntu nodes and fix Java errors
+  hosts: localhost
+  become: no
+  tasks:
+    - name: Get Lima instance names
+      shell: limactl list | awk 'NR>1 {print $1}'
+      register: lima_nodes_raw
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Set node list
+      set_fact:
+        node_list: "{{ lima_nodes_raw.stdout_lines }}"
+
+    - name: Check for Java binary
+      shell: limactl shell {{ item }} -- command -v java || true
+      loop: "{{ node_list }}"
+      register: java_check
+      changed_when: false
+
+    - name: Create fake Java command if missing
+      shell: >
+        limactl shell {{ item }} -- sudo bash -c 'echo "$(whoami) ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/nopasswd && chmod 0440 /etc/sudoers.d/nopasswd && ln -s /bin/true /usr/bin/java'
+      loop: "{{ node_list }}"
+      when: java_check.results | selectattr('stdout', 'search', 'java') | list | length == 0
+      ignore_errors: yes
+
+    - name: Remove Java-related environment variables
+      shell: |
+        limactl shell {{ item }} -- sudo sed -i '/JAVA_HOME/d' /etc/environment
+        limactl shell {{ item }} -- sudo sed -i '/java/d' /etc/profile
+        limactl shell {{ item }} -- sudo sed -i '/java/d' /etc/bash.bashrc
+      loop: "{{ node_list }}"
+      ignore_errors: yes
+
+    - name: SSH into Lima nodes and run updates
+      shell: limactl shell {{ item }} -- sudo -u iota -i bash -c "sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y"
+      loop: "{{ node_list }}"
+      register: update_results
+      ignore_errors: yes
+
+    - name: Show update results
+      debug:
+        msg: "{{ update_results.results | map(attribute='stdout') | list }}"

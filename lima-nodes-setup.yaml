@@ -1,0 +1,68 @@
+- name: Setup Lima Ubuntu Nodes on macOS
+  hosts: localhost
+  become: no
+  tasks:
+    - name: Check if Lima is installed
+      shell: command -v limactl
+      register: lima_installed
+      ignore_errors: yes
+
+    - name: Install Lima if not installed
+      homebrew:
+        name: lima
+        state: present
+      when: lima_installed.rc != 0
+
+    - name: Check if any Lima instances exist
+      shell: limactl list --json | jq -r 'if type=="array" then .[].name else empty end'
+      register: lima_list
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Delete existing Lima nodes if they exist
+      shell: |
+        limactl stop k8s-master || true
+        limactl delete k8s-master || true
+        limactl stop k8s-worker1 || true
+        limactl delete k8s-worker1 || true
+        limactl stop k8s-worker2 || true
+        limactl delete k8s-worker2 || true
+        limactl stop k8s-worker3 || true
+        limactl delete k8s-worker3 || true
+      when: "'k8s-master' in lima_list.stdout or 'k8s-worker1' in lima_list.stdout"
+
+    - name: Remove Lima configuration directory
+      shell: rm -rf ~/.lima
+      ignore_errors: yes
+
+    - name: Start Ubuntu master node
+      shell: |
+        limactl start --name k8s-master template://ubuntu-lts --disk 5
+      register: master_creation
+      changed_when: "'k8s-master' not in lima_list.stdout"
+
+    - name: Wait for master node to be fully ready
+      shell: limactl list | grep k8s-master
+      register: master_ready
+      retries: 5
+      delay: 5
+      until: "'k8s-master' in master_ready.stdout"
+
+    - name: Start Ubuntu worker nodes
+      shell: |
+        limactl start --name k8s-worker1 template://ubuntu-lts --disk 5 
+        limactl start --name k8s-worker2 template://ubuntu-lts --disk 5 
+        limactl start --name k8s-worker3 template://ubuntu-lts --disk 5
+      register: worker_creation
+      changed_when: "'k8s-worker1' not in lima_list.stdout"
+
+    - name: Verify Ubuntu nodes are running
+      shell: limactl list
+      register: final_status
+      retries: 5
+      delay: 5
+      until: "'k8s-master' in final_status.stdout and 'k8s-worker1' in final_status.stdout and 'k8s-worker2' in final_status.stdout and 'k8s-worker3' in final_status.stdout"
+
+    - name: Show Lima status
+      debug:
+        msg: "{{ final_status.stdout }}"
